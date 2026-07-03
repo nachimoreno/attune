@@ -40,8 +40,10 @@ void main() {
   float t = uTime * (0.05 + uP2 * 0.12);
   vec2 p = uv * 1.6 + vec2(0.0, -t * 1.2); // slow upward wash — waves rise
 
-  // bass churns the paint; the kick flushes a surge of stir through it
-  float churn = (0.8 + uP1 * 2.6) * (1.0 + uBass * 0.9 + uKick * 0.5);
+  // bass churns the paint; the kick flushes a surge of stir through it.
+  // the base floor is near-zero so churn 0 is an almost-laminar wash — the
+  // knob's low quarter is where the calm settings live
+  float churn = (0.05 + uP1 * 1.95) * (1.0 + uBass * 0.9 + uKick * 0.5);
 
   vec2 q = vec2(fbm(p + t * 0.9),
                 fbm(p + vec2(5.2, 1.3) - t * 0.7));
@@ -81,7 +83,7 @@ export class PaintScene extends QuadScene {
       title: 'paint',
       frag: FRAG,
       macros: [
-        { key: 'churn', label: 'churn', value: 0.35 },
+        { key: 'churn', label: 'churn', value: 0.2 },
         { key: 'drift', label: 'drift', value: 0.5 },
         { key: 'cycle', label: 'cycle', value: 0.55 },
       ],
