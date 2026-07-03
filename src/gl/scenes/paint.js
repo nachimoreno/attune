@@ -81,11 +81,14 @@ export class PaintScene extends QuadScene {
       title: 'paint',
       frag: FRAG,
       macros: [
-        { key: 'churn', label: 'churn', value: 0.6 },
+        { key: 'churn', label: 'churn', value: 0.35 },
         { key: 'drift', label: 'drift', value: 0.5 },
         { key: 'cycle', label: 'cycle', value: 0.55 },
       ],
     });
+    // the pigment field is fragment-heavy and reads well slightly soft, so it
+    // ships at half internal resolution (the quality slider retunes it live)
+    this.renderScale = 0.5;
     this.palettes = PALETTES;
     this.paletteIndex = 0;
     this.cyclePhase = 0;

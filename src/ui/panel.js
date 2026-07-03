@@ -28,6 +28,12 @@ function slider(labelText, value, oninput) {
 const msOf = v => 60 * Math.pow(10, v);
 const msTo = ms => Math.log10(ms / 60);
 
+// quality slider 0..1 ↔ render scale. The floor is deliberately low: paint
+// holds up heavily downscaled, and at 0.2 the framebuffer is ~1/25 the pixels.
+const Q_MIN = 0.2;
+const scaleOf = v => Q_MIN + (1 - Q_MIN) * v;
+const scaleTo = s => Math.max(0, Math.min(1, (s - Q_MIN) / (1 - Q_MIN)));
+
 export class Panel {
   constructor({ tuning, engine, renderer, onScene }) {
     this.tuning = tuning;
@@ -150,8 +156,18 @@ export class Panel {
       }
       this.sceneButtons.forEach(({ b, i }) =>
         b.classList.toggle('active', i === this.renderer.activeIndex));
+      this.syncQuality();
     };
     this.renderMacros();
+  }
+
+  // pull the quality slider to the active scene's render scale (scenes carry
+  // their own; the slider is shared, so it re-reads on every scene switch)
+  syncQuality() {
+    if (!this.qualityInput) return; // bindInput runs after the first renderMacros
+    const scale = this.renderer.active.renderScale ?? 1;
+    this.qualityInput.value = String(scaleTo(scale));
+    this.qualityVal.textContent = Math.round(scale * 100) + '%';
   }
 
   bindInput() {
@@ -175,6 +191,17 @@ export class Panel {
     this.btnPlay.addEventListener('click', () => this.engine.toggle());
     $('vol').addEventListener('input', e =>
       this.engine.setVolume(parseFloat(e.target.value)));
+    // quality: sets the *active* scene's render scale, so each scene keeps its
+    // own resolution (paint low, particles native) and the slider follows the
+    // scene you're on — syncQuality() re-reads it on every scene switch.
+    this.qualityInput = $('quality');
+    this.qualityVal = $('quality-val');
+    this.qualityInput.addEventListener('input', e => {
+      const scale = scaleOf(parseFloat(e.target.value));
+      this.renderer.setRenderScale(scale);
+      this.qualityVal.textContent = Math.round(scale * 100) + '%';
+    });
+    this.syncQuality();
     const reactVal = $('react-val');
     $('react').addEventListener('input', e => {
       const v = parseFloat(e.target.value);

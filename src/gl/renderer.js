@@ -159,10 +159,23 @@ export class Renderer {
     if (i >= 0 && i < this.scenes.length) this.activeIndex = i;
   }
 
+  // Render scale lives per scene (scene.renderScale, default 1): it's an
+  // internal-resolution multiplier where lower renders fewer pixels and lets
+  // CSS upscale — the cheapest lever for fragment-bound scenes, since work
+  // scales with the square of it (see paint.js). Aspect ratio and point sizes
+  // track the framebuffer, so the look is unchanged at 1. paint ships low
+  // because its soft pigment field reads better slightly blurred; particles
+  // stays native so points stay crisp.
+  setRenderScale(s) {
+    this.active.renderScale = s;
+    this.resize();
+  }
+
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.round(this.canvas.clientWidth * dpr);
-    const h = Math.round(this.canvas.clientHeight * dpr);
+    const scale = this.active ? this.active.renderScale ?? 1 : 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * scale;
+    const w = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
+    const h = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
     if (w !== this.canvas.width || h !== this.canvas.height) {
       this.canvas.width = w;
       this.canvas.height = h;
