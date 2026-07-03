@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>attune — music visualization engine</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="hint">
+  <div class="hint-mark">ATTUNE</div>
+  <div class="hint-line">drop an audio file anywhere</div>
+  <div class="hint-line dim">or press <kbd>D</kbd> for the demo beat &nbsp;·&nbsp; <kbd>M</kbd> for mic</div>
+</div>
+
+<aside id="rack" aria-label="Engine controls">
+  <header id="rack-head">
+    <span class="wordmark">ATTUNE</span>
+    <span id="bpm-readout" class="bpm">— <em>bpm</em></span>
+  </header>
+
+  <section id="sec-input" class="sec">
+    <div class="sec-label">input</div>
+    <div class="btn-row">
+      <button id="btn-demo" type="button">demo beat</button>
+      <button id="btn-mic" type="button">mic</button>
+      <button id="btn-file" type="button">load track</button>
+      <input id="file-input" type="file" accept="audio/*" hidden>
+    </div>
+    <div class="btn-row transport">
+      <button id="btn-play" type="button" disabled>play</button>
+      <span id="track-name" class="track-name">no input</span>
+    </div>
+    <label class="vol-row">
+      <span>monitor</span>
+      <input id="vol" type="range" min="0" max="1" step="0.01" value="0.9">
+    </label>
+  </section>
+
+  <section id="sec-scope" class="sec">
+    <div class="sec-label">what the engine hears</div>
+    <canvas id="scope"></canvas>
+  </section>
+
+  <section id="sec-signals" class="sec">
+    <label class="vol-row react-row">
+      <span>reactivity</span>
+      <input id="react" type="range" min="0" max="1" step="0.01" value="1">
+      <output id="react-val">1.00</output>
+    </label>
+    <div class="sec-label">detectors</div>
+    <div id="detector-rows"></div>
+    <div class="sec-label" style="margin-top:10px">levels</div>
+    <div id="level-rows"></div>
+  </section>
+
+  <section id="sec-scene" class="sec">
+    <div class="sec-label">generator</div>
+    <div id="scene-tabs" class="btn-row"></div>
+    <div id="scene-macros"></div>
+  </section>
+
+  <footer id="rack-foot">
+    <span><kbd>space</kbd> play</span>
+    <span><kbd>1–2</kbd> scene</span>
+    <span><kbd>H</kbd> hide</span>
+  </footer>
+</aside>
+
+<div id="drop-veil"><span>drop to load</span></div>
+<pre id="err" hidden></pre>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
