@@ -56,9 +56,15 @@ export class ParticleScene {
     this.name = 'particles';
     this.title = 'particles';
     this.macros = [
-      { key: 'impulse', label: 'impulse', value: 0.7 },
-      { key: 'flow', label: 'flow', value: 0.5 },
-      { key: 'cycle', label: 'cycle', value: 0.6 },
+      { key: 'impulse', label: 'impulse', value: 0.7,
+        info: 'how hard hits move the cloud — kicks shove it outward, snares '
+          + 'twist it; the push lands on the rising edge of each hit' },
+      { key: 'flow', label: 'flow', value: 0.5,
+        info: 'strength of the wind field that carries particles around; it '
+          + 'breathes with the bass and a little with the treble' },
+      { key: 'cycle', label: 'cycle', value: 0.6,
+        info: 'palette cycling speed — 0 is ~12s per colour stop, 1 is ~2s; '
+          + 'the music\'s brightness nudges the cloud further along' },
     ];
     this.palettes = PALETTES;
     this.paletteIndex = 0;

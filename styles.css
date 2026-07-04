@@ -223,8 +223,8 @@ button:disabled { opacity: 0.35; cursor: default; }
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text);
-  flex: 1;
 }
+.sig-spacer { flex: 1; }
 .sig-val {
   font-size: 9px;
   color: var(--dim);
@@ -252,17 +252,35 @@ button:disabled { opacity: 0.35; cursor: default; }
   flex: 1;
   min-width: 0; /* flex items refuse to shrink below content otherwise */
   display: flex;
-  align-items: center;
-  gap: 5px;
+  flex-direction: column; /* name/value line above, full-width slider below */
+  gap: 2px;
   font-size: 8px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--dim);
 }
 .slider-pair input {
-  flex: 1;
   min-width: 0;
-  width: 0; /* kill the ~129px intrinsic width of range inputs */
+  width: 100%; /* kill the ~129px intrinsic width of range inputs */
+}
+
+.param-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.param-head span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.param-val {
+  margin-left: auto;
+  font-size: 8px;
+  letter-spacing: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- range inputs ---------- */
@@ -321,6 +339,52 @@ input[type="range"]:focus-visible { outline: 1px solid var(--white); outline-off
   color: var(--dim);
 }
 .macro-row input { flex: 1; }
+.macro-val {
+  flex: 0 0 30px;
+  text-align: right;
+  font-size: 9px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- info dots + shared tooltip ---------- */
+
+.info-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  font-size: 8px;
+  font-style: italic;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--faint);
+  border-radius: 50%;
+  cursor: help;
+}
+.info-dot:hover { color: var(--white); border-color: var(--dim); background: transparent; }
+
+#tip {
+  position: fixed;
+  z-index: 40;
+  max-width: 240px;
+  padding: 7px 9px;
+  background: rgba(18, 19, 23, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+#tip.on { opacity: 1; }
 
 /* ---------- backdrop picker ---------- */
 

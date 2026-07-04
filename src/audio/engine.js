@@ -43,8 +43,30 @@ export class AudioEngine {
       this.monitor.connect(this.master);
       this.master.connect(this.ctx.destination);
     }
-    if (this.ctx.state === 'suspended') await this.ctx.resume();
+    if (this.ctx.state === 'suspended') this.resumeSoon();
     return this.ctx;
+  }
+
+  // resume() can stay pending until the browser sees a user gesture (e.g. a
+  // drag-and-drop load before any click), so never await it — that would
+  // stall loadFile before the file is even decoded. Sources scheduled on a
+  // suspended context start the moment it resumes; until then, retry on the
+  // next gesture.
+  resumeSoon() {
+    this.ctx.resume();
+    if (this.resumeArmed) return;
+    this.resumeArmed = true;
+    const retry = () => { this.ctx.resume(); };
+    const disarm = () => {
+      if (this.ctx.state === 'suspended') return;
+      window.removeEventListener('pointerdown', retry);
+      window.removeEventListener('keydown', retry);
+      this.ctx.removeEventListener('statechange', disarm);
+      this.resumeArmed = false;
+    };
+    window.addEventListener('pointerdown', retry);
+    window.addEventListener('keydown', retry);
+    this.ctx.addEventListener('statechange', disarm);
   }
 
   get active() {

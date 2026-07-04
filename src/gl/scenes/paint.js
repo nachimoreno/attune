@@ -12,6 +12,9 @@ const FRAG = `
 uniform vec3 uStops[4];
 uniform float uNStops;
 uniform float uPhase;
+uniform float uSpan;
+uniform float uWide; // 1 = full palette: pigment fills the field, no black
+uniform float uFloor; // full mode: brightness of the dimmest pigment
 uniform vec3 uBg;
 
 float fbm(vec2 p) {
@@ -41,9 +44,9 @@ void main() {
   vec2 p = uv * 1.6 + vec2(0.0, -t * 1.2); // slow upward wash — waves rise
 
   // bass churns the paint; the kick flushes a surge of stir through it.
-  // the base floor is near-zero so churn 0 is an almost-laminar wash — the
-  // knob's low quarter is where the calm settings live
-  float churn = (0.05 + uP1 * 1.95) * (1.0 + uBass * 0.9 + uKick * 0.5);
+  // the base floor keeps churn 0 an almost-laminar wash — the knob's low
+  // quarter is where the calm settings live
+  float churn = (0.09 + uP1 * 1.91) * (1.0 + uBass * 0.9 + uKick * 0.5);
 
   vec2 q = vec2(fbm(p + t * 0.9),
                 fbm(p + vec2(5.2, 1.3) - t * 0.7));
@@ -54,19 +57,31 @@ void main() {
                             snoise(p * 3.0 - t * 4.0));
   float f = fbm(p + churn * r);
 
-  // the field spans ~1.5 adjacent stops — two pigments mixing at a time,
-  // with the cycle phase sliding which pair; kicks push toward the hotter
-  float u = uPhase + f * 1.6 + uKick * 0.6 + uBright * 0.4;
+  // the field spans uSpan stops: ~1.5 for the two-pigments-at-a-time mix
+  // (the cycle phase slides which pair), or trough-to-crest across the whole
+  // palette for full ones. fbm bunches around mid-range, so full palettes
+  // contrast-stretch the colour coordinate — without it the frame only shows
+  // a stop and a half and the cycle drifts it back to one-colour-on-black.
+  // kicks push toward the hotter
+  float fc = mix(f, smoothstep(0.22, 0.78, f), uWide);
+  float u = uPhase + fc * uSpan + uKick * 0.6 + uBright * 0.4;
   vec3 ink = palSample(u);
 
-  // steep tone curve: troughs go dark, crests flare
+  // steep tone curve: troughs go dark, crests flare. Full palettes relax it
+  // and keep a pigment floor — troughs stay dim colour (the red body under
+  // yellow crests) instead of dropping to black
   float fs = smoothstep(0.18, 0.92, f);
-  float lum = pow(fs, 2.0 + (1.0 - uLoud) * 1.0);
+  float lum = pow(fs, mix(2.0 + (1.0 - uLoud), 1.2 + (1.0 - uLoud) * 0.4, uWide));
+  lum = mix(lum, uFloor + (1.0 - uFloor) * lum, uWide);
   float v = lum * (0.85 + uLoud * 0.7 + uKick * 0.5);
+  // dim pigment deepens into its own saturated self instead of scaling
+  // toward black — darkened yellow reads olive-green, but squared it stays
+  // golden, so a stop fading out keeps its vividness (full palettes only)
+  ink *= mix(ink, vec3(1.0), max(lum, 1.0 - uWide));
   // folds where the warp shears hardest get veined with the neighbouring
   // colour — two pigments interleaving, not one paint brightening
   float ridge = pow(clamp(length(r - q) * 0.9, 0.0, 1.0), 3.0);
-  vec3 vein = palSample(u + 1.2);
+  vec3 vein = palSample(u + uSpan * 0.75);
 
   vec3 col = uBg + ink * v
            + vein * ridge * (0.2 + uSnare * 0.35 + uKick * 0.15);
@@ -83,9 +98,15 @@ export class PaintScene extends QuadScene {
       title: 'paint',
       frag: FRAG,
       macros: [
-        { key: 'churn', label: 'churn', value: 0.2 },
-        { key: 'drift', label: 'drift', value: 0.5 },
-        { key: 'cycle', label: 'cycle', value: 0.55 },
+        { key: 'churn', label: 'churn', value: 0.2,
+          info: 'how turbulently the pigment folds into itself — the low '
+            + 'quarter is a calm laminar wash; bass and kicks stir it harder' },
+        { key: 'drift', label: 'drift', value: 0.5,
+          info: 'base speed of the upward wash — how fast the paint field '
+            + 'flows on its own, before the music moves it' },
+        { key: 'cycle', label: 'cycle', value: 0.55,
+          info: 'palette cycling speed — 0 is ~12s per colour stop, 1 is ~2s; '
+            + 'kicks push the colour toward the hotter stop' },
       ],
     });
     // the pigment field is fragment-heavy and reads well slightly soft, so it
@@ -104,6 +125,9 @@ export class PaintScene extends QuadScene {
     this.locStops = gl.getUniformLocation(this.prog, 'uStops');
     this.locN = gl.getUniformLocation(this.prog, 'uNStops');
     this.locPhase = gl.getUniformLocation(this.prog, 'uPhase');
+    this.locSpan = gl.getUniformLocation(this.prog, 'uSpan');
+    this.locWide = gl.getUniformLocation(this.prog, 'uWide');
+    this.locFloor = gl.getUniformLocation(this.prog, 'uFloor');
     this.locBg = gl.getUniformLocation(this.prog, 'uBg');
   }
 
@@ -118,6 +142,10 @@ export class PaintScene extends QuadScene {
     gl.uniform3fv(this.locStops, this.stopBuf);
     gl.uniform1f(this.locN, pal.stops.length / 3);
     gl.uniform1f(this.locPhase, this.cyclePhase);
+    // full: trough-to-crest covers every stop exactly once (n-1 intervals)
+    gl.uniform1f(this.locSpan, pal.full ? pal.stops.length / 3 - 1 : 1.6);
+    gl.uniform1f(this.locWide, pal.full ? 1 : 0);
+    gl.uniform1f(this.locFloor, pal.floor ?? 0.35);
     gl.uniform3fv(this.locBg, this.bgBuf);
   }
 }

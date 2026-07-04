@@ -285,7 +285,7 @@ export class FeatureExtractor {
 export const defaultTuning = () => ({
   // global blend between the scene's natural idle motion (0) and full
   // audio response (1); applied in the main loop, after extraction
-  master: { reactivity: 1 },
+  master: { reactivity: 0.1 },
   kick: { amt: 1.0, sens: 0.5, decay: 260 },
   snare: { amt: 0.9, sens: 0.5, decay: 200 },
   hihat: { amt: 0.35, sens: 0.5, decay: 100 },

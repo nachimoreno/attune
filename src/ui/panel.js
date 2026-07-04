@@ -2,6 +2,7 @@
 // slider you drag and the signal it shapes are one object.
 
 import { SIGNAL_COLORS } from './scope.js';
+import { infoDot } from './tooltip.js';
 
 function el(tag, cls, parent) {
   const e = document.createElement(tag);
@@ -10,23 +11,72 @@ function el(tag, cls, parent) {
   return e;
 }
 
-function slider(labelText, value, oninput) {
+// every slider shows its live value in real units (fmt maps the raw 0..1
+// slider position to display text) and carries an (i) explaining the knob
+function slider(labelText, value, oninput, { fmt = v => v.toFixed(2), info } = {}) {
   const label = document.createElement('label');
-  const span = el('span', null, label);
+  const head = el('div', 'param-head', label);
+  const span = el('span', null, head);
   span.textContent = labelText;
+  if (info) head.appendChild(infoDot(info));
+  const out = el('output', 'param-val', head);
   const input = el('input', null, label);
   input.type = 'range';
   input.min = '0';
   input.max = '1';
   input.step = '0.01';
   input.value = String(value);
-  input.addEventListener('input', () => oninput(parseFloat(input.value)));
+  out.textContent = fmt(value);
+  input.addEventListener('input', () => {
+    const v = parseFloat(input.value);
+    oninput(v);
+    out.textContent = fmt(v);
+  });
   return label;
 }
 
 // slider position 0..1 → milliseconds 60..600 (log)
 const msOf = v => 60 * Math.pow(10, v);
 const msTo = ms => Math.log10(ms / 60);
+const fmtMs = v => Math.round(msOf(v)) + 'ms';
+const fmtX = v => '×' + (v * 2).toFixed(2);
+const fmtPct = v => Math.round(v * 100) + '%';
+
+// what each control actually does — surfaced through the (i) dots
+const INFO = {
+  signal: {
+    kick: 'onset detector on the low band (30–120 Hz) — fires on kick-drum '
+      + 'hits; each hit is a punch that jumps and decays, scenes ride it as the pulse',
+    snare: 'onset detector that needs a simultaneous rise in snare body '
+      + '(180–450 Hz) AND crack (2–4.5 kHz), so hi-hats and kick thumps are rejected — the accent channel',
+    hihat: 'onset detector on the high band (6–14 kHz): hi-hats, shakers, '
+      + 'cymbal ticks — kept subordinate in the house style',
+    bass: 'energy in 30–250 Hz, normalized against the track\'s own running '
+      + 'average so every mix lands in 0–1 — scenes read it as continuous weight',
+    mid: 'energy in 250 Hz–2 kHz — vocals, chords, leads — normalized to the '
+      + 'track itself, smoothed into a continuous level',
+    treble: 'energy in 2–6 kHz: presence, not air — hi-hats and cymbal wash '
+      + 'live in the hihat detector instead, so they can\'t own this level',
+  },
+  amt: name => `output level: scenes receive ${name} × amt, so 0 removes ${name} `
+    + 'from the visuals entirely (the LED keeps showing raw detection)',
+  sens: 'how easily a hit registers — low passes only the hardest hits, high '
+    + 'is a hair trigger; the very bottom switches the detector off',
+  decay: 'ring-out time of each hit: short is a tight flash, long is a washy '
+    + 'pulse that carries into the next beat',
+  gain: 'scales the band level before soft-clipping — above ×1.00 pushes it '
+    + 'toward the top of its range, below leaves headroom',
+  smooth: 'fall time after the band quiets down; rises always stay fast so '
+    + 'hits still land on time',
+  monitor: 'playback volume only — the engine analyses the signal before this '
+    + 'gain, so quiet monitoring changes nothing in the visuals',
+  quality: 'render resolution of the active scene (each scene keeps its own) — '
+    + 'lower it if frames drop; paint holds up even very low',
+  reactivity: 'blends every signal between the scene\'s natural idle motion (0) '
+    + 'and full audio response (1) — LEDs and bpm stay live throughout',
+  backdrop: 'the scene\'s clear colour, the canvas everything else is drawn '
+    + 'over — × resets to the scene default',
+};
 
 // quality slider 0..1 ↔ render scale. The floor is deliberately low: paint
 // holds up heavily downscaled, and at 0.2 the framebuffer is ~1/25 the pixels.
@@ -55,6 +105,8 @@ export class Panel {
     if (hasLed) led = el('div', 'led', head);
     const nm = el('div', 'sig-name', head);
     nm.textContent = name;
+    if (INFO.signal[name]) head.appendChild(infoDot(INFO.signal[name]));
+    el('div', 'sig-spacer', head);
     const val = el('div', 'sig-val', head);
     val.textContent = '0.00';
     const pair = el('div', 'slider-pair', row);
@@ -70,9 +122,10 @@ export class Panel {
     for (const name of ['kick', 'snare', 'hihat']) {
       const t = this.tuning[name];
       this.signalRow(host, name, true, [
-        slider('amt', t.amt, v => { t.amt = v; }),
-        slider('sens', t.sens, v => { t.sens = v; }),
-        slider('decay', msTo(t.decay), v => { t.decay = msOf(v); }),
+        slider('amt', t.amt, v => { t.amt = v; }, { info: INFO.amt(name) }),
+        slider('sens', t.sens, v => { t.sens = v; }, { info: INFO.sens }),
+        slider('decay', msTo(t.decay), v => { t.decay = msOf(v); },
+          { fmt: fmtMs, info: INFO.decay }),
       ]);
     }
   }
@@ -82,8 +135,10 @@ export class Panel {
     for (const name of ['bass', 'mid', 'treble']) {
       const t = this.tuning[name];
       this.signalRow(host, name, false, [
-        slider('gain', t.gain / 2, v => { t.gain = v * 2; }),
-        slider('smooth', msTo(t.release), v => { t.release = msOf(v); }),
+        slider('gain', t.gain / 2, v => { t.gain = v * 2; },
+          { fmt: fmtX, info: INFO.gain }),
+        slider('smooth', msTo(t.release), v => { t.release = msOf(v); },
+          { fmt: fmtMs, info: INFO.smooth }),
       ]);
     }
   }
@@ -107,18 +162,25 @@ export class Panel {
         const row = el('div', 'macro-row', macroHost);
         const s = el('span', null, row);
         s.textContent = m.label;
+        if (m.info) row.appendChild(infoDot(m.info));
         const input = el('input', null, row);
         input.type = 'range';
         input.min = '0';
         input.max = '1';
         input.step = '0.01';
         input.value = String(m.value);
-        input.addEventListener('input', () => { m.value = parseFloat(input.value); });
+        const out = el('output', 'macro-val', row);
+        out.textContent = m.value.toFixed(2);
+        input.addEventListener('input', () => {
+          m.value = parseFloat(input.value);
+          out.textContent = m.value.toFixed(2);
+        });
       }
       if (scene.background) {
         const row = el('div', 'macro-row bg-row', macroHost);
         const s = el('span', null, row);
         s.textContent = 'backdrop';
+        row.appendChild(infoDot(INFO.backdrop));
         const input = el('input', null, row);
         input.type = 'color';
         const toHex = c => '#' + c.map(v =>
@@ -189,8 +251,17 @@ export class Panel {
       if (fileInput.files[0]) this.engine.loadFile(fileInput.files[0]);
     });
     this.btnPlay.addEventListener('click', () => this.engine.toggle());
-    $('vol').addEventListener('input', e =>
-      this.engine.setVolume(parseFloat(e.target.value)));
+    // the fixed rows live in index.html; their (i) dots slot in after the name
+    for (const [id, info] of [['vol', INFO.monitor], ['quality', INFO.quality],
+      ['react', INFO.reactivity]]) {
+      $(id).parentElement.querySelector('span').after(infoDot(info));
+    }
+    const volOut = $('vol-val');
+    $('vol').addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      this.engine.setVolume(v);
+      volOut.textContent = fmtPct(v);
+    });
     // quality: sets the *active* scene's render scale, so each scene keeps its
     // own resolution (paint low, particles native) and the slider follows the
     // scene you're on — syncQuality() re-reads it on every scene switch.
