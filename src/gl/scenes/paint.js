@@ -1,8 +1,11 @@
 // Paint — wet pigment mixing itself in slow motion; with the fire palette
 // it reads as rising waves of flame. Built on layered domain warping
-// (noise displaced by noise displaced by noise). Bass churns the paint,
-// kicks flush heat through it and push the colour toward the next stop,
-// snares splash fine turbulence across the surface, hats barely shimmer.
+// (noise displaced by noise displaced by noise). Bass churns the paint;
+// kicks flush heat through it and surge its flow clock forward, snares
+// scroll fresh fine turbulence into the surface, hats barely shimmer.
+// Hits accumulate into clocks that only advance (flow, splash, palette
+// phase), never into reversible warp scaling — so the paint keeps evolving
+// through each hit instead of stretching out and snapping back.
 // Colours come from the shared palette system, cycling like the particles.
 
 import { QuadScene } from '../renderer.js';
@@ -16,6 +19,8 @@ uniform float uSpan;
 uniform float uWide; // 1 = full palette: pigment fills the field, no black
 uniform float uFloor; // full mode: brightness of the dimmest pigment
 uniform vec3 uBg;
+uniform float uFlow;   // accumulated flow clock (CPU-side): kicks surge it
+uniform float uSplash; // accumulated snare-splash phase, forward-only
 
 float fbm(vec2 p) {
   float v = 0.0, a = 0.5;
@@ -40,21 +45,25 @@ vec3 palSample(float u) {
 
 void main() {
   vec2 uv = (gl_FragCoord.xy * 2.0 - uRes) / uRes.y;
-  float t = uTime * (0.05 + uP2 * 0.12);
+  float t = uFlow; // integrated on the CPU; only ever moves forward
   vec2 p = uv * 1.6 + vec2(0.0, -t * 1.2); // slow upward wash — waves rise
 
-  // bass churns the paint; the kick flushes a surge of stir through it.
+  // bass churns the paint. Kicks put their energy into uFlow instead of
+  // this amplitude — scaling the warp is reversible (it snaps back as the
+  // punch decays, reading as a rewind), so only a whisper stays for impact.
   // the base floor keeps churn 0 an almost-laminar wash — the knob's low
   // quarter is where the calm settings live
-  float churn = (0.09 + uP1 * 1.91) * (1.0 + uBass * 0.9 + uKick * 0.5);
+  float churn = (0.09 + uP1 * 1.91) * (1.0 + uBass * 0.9 + uKick * 0.15);
 
   vec2 q = vec2(fbm(p + t * 0.9),
                 fbm(p + vec2(5.2, 1.3) - t * 0.7));
   vec2 r = vec2(fbm(p + churn * q + vec2(1.7, 9.2) + t * 0.45),
                 fbm(p + churn * q + vec2(8.3, 2.8) - t * 0.35));
-  // snare splash: fine fast turbulence stirred in for the accent
-  r += uSnare * 0.35 * vec2(snoise(p * 3.0 + t * 4.0),
-                            snoise(p * 3.0 - t * 4.0));
+  // snare splash: each hit scrolls the fine turbulence to a fresh fold
+  // (uSplash only advances) and the small base amplitude keeps that fold
+  // in the surface after the punch fades — a lasting trace, not an echo
+  r += (0.07 + uSnare * 0.28) * vec2(snoise(p * 3.0 + uSplash),
+                                     snoise(p * 3.0 - uSplash * 0.85));
   float f = fbm(p + churn * r);
 
   // the field spans uSpan stops: ~1.5 for the two-pigments-at-a-time mix
@@ -62,9 +71,10 @@ void main() {
   // palette for full ones. fbm bunches around mid-range, so full palettes
   // contrast-stretch the colour coordinate — without it the frame only shows
   // a stop and a half and the cycle drifts it back to one-colour-on-black.
-  // kicks push toward the hotter
+  // kicks flash a little heat here; their lasting push toward the hotter
+  // stop rides uPhase, which they ratchet forward on the CPU
   float fc = mix(f, smoothstep(0.22, 0.78, f), uWide);
-  float u = uPhase + fc * uSpan + uKick * 0.6 + uBright * 0.4;
+  float u = uPhase + fc * uSpan + uKick * 0.25 + uBright * 0.4;
   vec3 ink = palSample(u);
 
   // steep tone curve: troughs go dark, crests flare. Full palettes relax it
@@ -100,13 +110,14 @@ export class PaintScene extends QuadScene {
       macros: [
         { key: 'churn', label: 'churn', value: 0.2,
           info: 'how turbulently the pigment folds into itself — the low '
-            + 'quarter is a calm laminar wash; bass and kicks stir it harder' },
+            + 'quarter is a calm laminar wash; bass stirs it harder, kicks '
+            + 'surge the flow forward' },
         { key: 'drift', label: 'drift', value: 0.5,
           info: 'base speed of the upward wash — how fast the paint field '
-            + 'flows on its own, before the music moves it' },
+            + 'flows on its own, before the music pushes it ahead' },
         { key: 'cycle', label: 'cycle', value: 0.55,
           info: 'palette cycling speed — 0 is ~12s per colour stop, 1 is ~2s; '
-            + 'kicks push the colour toward the hotter stop' },
+            + 'kicks ratchet the colour toward the hotter stop' },
       ],
     });
     // the pigment field is fragment-heavy and reads well slightly soft, so it
@@ -115,6 +126,8 @@ export class PaintScene extends QuadScene {
     this.palettes = PALETTES;
     this.paletteIndex = 0;
     this.cyclePhase = 0;
+    this.flowTime = 0;
+    this.splashPhase = 0;
     this.background = [0.012, 0.008, 0.01];
     this.stopBuf = new Float32Array(12);
     this.bgBuf = new Float32Array(3);
@@ -129,12 +142,22 @@ export class PaintScene extends QuadScene {
     this.locWide = gl.getUniformLocation(this.prog, 'uWide');
     this.locFloor = gl.getUniformLocation(this.prog, 'uFloor');
     this.locBg = gl.getUniformLocation(this.prog, 'uBg');
+    this.locFlow = gl.getUniformLocation(this.prog, 'uFlow');
+    this.locSplash = gl.getUniformLocation(this.prog, 'uSplash');
   }
 
   setUniforms(gl, state) {
     super.setUniforms(gl, state);
+    const s = state.signals;
+    const drift = this.macros[1].value;
     const cyc = this.macros[2].value;
-    this.cyclePhase += state.dt / (12 - cyc * 10);
+    // hits are integrated into forward-only clocks rather than scaling the
+    // warp: the field gets pushed ahead through its own folding motion and
+    // stays there, so every kick leaves the paint somewhere new
+    this.flowTime += state.dt * (0.05 + drift * 0.12)
+      * (1 + s.kick * 2.5 + s.bass * 0.4);
+    this.splashPhase += state.dt * (0.15 + s.snare * 7.0);
+    this.cyclePhase += state.dt / (12 - cyc * 10) + state.dt * s.kick * 0.35;
     const pal = this.palettes[this.paletteIndex];
     this.stopBuf.fill(0);
     this.stopBuf.set(pal.stops);
@@ -147,6 +170,8 @@ export class PaintScene extends QuadScene {
     gl.uniform1f(this.locWide, pal.full ? 1 : 0);
     gl.uniform1f(this.locFloor, pal.floor ?? 0.35);
     gl.uniform3fv(this.locBg, this.bgBuf);
+    gl.uniform1f(this.locFlow, this.flowTime);
+    gl.uniform1f(this.locSplash, this.splashPhase);
   }
 }
 
